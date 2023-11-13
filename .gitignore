@@ -29,6 +29,3 @@ docker-compose.override.yml
 # Operating System files
 .DS_Store
 Thumbs.db
-
-# Admin data
-adminData.json

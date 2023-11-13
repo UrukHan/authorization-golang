@@ -3,33 +3,34 @@ package main
 import (
 	"auth/app"
 	"fmt"
-
+	"os"
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/postgres"
 	"github.com/spf13/viper"
 )
 
 func main() {
-	// Read configuration file
-	viper.SetConfigName("config")
-	viper.SetConfigType("yaml")
-	viper.AddConfigPath(".")
-	err := viper.ReadInConfig()
-	if err != nil {
+	// Setup configuration
+	viper.SetConfigFile("./config.yaml")
+	err := viper.ReadInConfig() // Find and read the config file
+	if err != nil { // Handle errors reading the config file
 		panic(fmt.Errorf("Fatal error config file: %s \n", err))
 	}
-	// Variables from config
-	app.MaxConfirmationTries = viper.GetInt("maxConfirmationTries")
-	app.AdminDataPath = viper.GetString("adminDataPath")
-	app.JwtSecret = viper.GetString("jwtSecret")
 
-	// Connect postgress
+	app.MaxConfirmationTries = viper.GetInt("maxConfirmationTries")
+
+	// Load from Kubernetes secrets
+	app.AdminPassword = os.Getenv("ADMIN_PASSWORD")
+	app.AdminEmail = os.Getenv("ADMIN_EMAIL")
+	app.JwtSecret = os.Getenv("JWTSECRET")
+
+	// Connect to PostgreSQL
 	db, err := gorm.Open("postgres", fmt.Sprintf("host=%s user=%s dbname=%s password=%s sslmode=%s",
-		viper.GetString("db.host"),
-		viper.GetString("db.user"),
-		viper.GetString("db.dbname"),
-		viper.GetString("db.password"),
-		viper.GetString("db.sslmode")))
+		os.Getenv("DB_HOST"),
+		os.Getenv("DB_USER"),
+		os.Getenv("DB_DBNAME"),
+		os.Getenv("DB_PASSWORD"),
+		os.Getenv("DB_SSLMODE")))
 	if err != nil {
 		fmt.Println(err)
 		panic("failed to connect database")
@@ -41,9 +42,6 @@ func main() {
 
 	// Adding routes to the same router
 	r := app.SetupRoutes(db)
-
-	// Run auto subscriber function in goroutine
-	go app.AutoRenewSubscriptions(db)
 
 	// Run un 0.0.0.0:8020
 	r.Run(":8020")

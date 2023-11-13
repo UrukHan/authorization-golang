@@ -1,9 +1,2 @@
-jwtSecret: "CSGO-DOTA-SERVICE-JWT-KEY"
-db:
-  host: localhost
-  user: postgres
-  password: W0lver1ne
-  dbname: gorm
-  sslmode: disable
+
 maxConfirmationTries: 3
-adminDataPath: "./adminData.json"

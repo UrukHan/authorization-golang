@@ -1,35 +1,53 @@
-# Начинаем с официального образа Go
-FROM golang:1.16-alpine AS build
+# Start with the Go official image
+FROM golang:1.21-rc-alpine3.17 AS build
 
-# Установка зависимостей для gcc
-RUN apk --no-cache add gcc g++ make
-
-# Установка рабочей директории в контейнере
+# Set the working directory in the container
 WORKDIR /app
 
-# Копируем go mod и sum файлы
+# Install ca-certificates
+RUN apk --no-cache add ca-certificates
+
+# Install git
+RUN apk add --no-cache git
+
+# Copy go mod and sum files
 COPY go.mod go.sum ./
 
-# Скачиваем все зависимости. Зависимости будут кэшироваться, если go.mod и go.sum не изменяются
-RUN go mod download
+# Set environment variable to bypass the proxy for github.com
+ENV GOPRIVATE=github.com
 
-# Копируем исходный код в контейнер
+# Download all dependencies. They will be cached if go.mod and go.sum files do not change
+RUN go mod download
+RUN go mod tidy
+
+# Copy the source code into the container
 COPY . .
 
-# Сборка приложения
+# Set environment variables
+ENV ADMIN_PASSWORD=
+ENV ADMIN_EMAIL=
+ENV JWTSECRET=
+ENV DB_HOST=
+ENV DB_USER=
+ENV DB_DBNAME=
+ENV DB_PASSWORD=
+ENV DB_SSLMODE=
+
+# Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main .
 
-# Начинаем новую стадию сборки для создания минимального образа
-FROM alpine:3.14
+##################
+# Start a new stage from scratch to create a minimal image
+FROM scratch
 
-# Настраиваем рабочую директорию
-WORKDIR /root/
-
-# Копирование исполняемого файла из предыдущей стадии
+# Copy the binary from the previous stage
 COPY --from=build /app/main .
 
-# Экспонируем порт, на котором ваше приложение будет работать
+# Copy the config file from the previous stage
+COPY --from=build /app/config.yaml .
+
+# Expose the port your app runs on
 EXPOSE 8020
 
-# Запуск приложения
+# Run the application
 CMD ["./main"]

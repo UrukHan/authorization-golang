@@ -1,5 +1,7 @@
+
 package app
 
+// import necessary packages
 import (
 	"errors"
 	"fmt"
@@ -10,17 +12,22 @@ import (
 	"net/smtp"
 	"strconv"
 	"time"
+	"log"
+	"crypto/tls"
 )
 
+// SMTP server configuration
 const (
 	smtpServer = "smtp.gmail.com"
-	smtpPort   = 587
+	smtpPort   = 465
 	smtpUser   = "neurobet.mail@gmail.com"
 	smtpPass   = "jomgzuajguxutrlb"
 )
 
+// Maximum number of confirmation attempts
 var MaxConfirmationTries int
 
+// User struct defines the properties of a User in the program
 type User struct {
 	gorm.Model
 	Phone             string
@@ -36,6 +43,7 @@ type User struct {
 	Block             bool
 }
 
+// UserInput struct defines the properties needed when a user logs in
 type UserInput struct {
 	Email    string `json:"email" binding:"required"`
 	Password string `json:"password" binding:"required"`
@@ -52,12 +60,14 @@ func (u *User) SetPassword(password string) error {
 	return nil
 }
 
-// CheckPassword compares the provided password against the stored hash
+
+// CheckPassword compares the given password against the stored hash
 func (u *User) CheckPassword(password string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(password))
 	return err == nil
 }
 
+// RegisterUser function handles the registration of Users
 func RegisterUser(c *gin.Context) {
 	db := c.MustGet("db").(*gorm.DB)
 
@@ -111,6 +121,7 @@ func RegisterUser(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Confirmation code sent to email"})
 }
 
+// ConfirmRegistration function handles the confirmation of User registration
 func ConfirmRegistration(c *gin.Context) {
 	db := c.MustGet("db").(*gorm.DB)
 
@@ -164,7 +175,9 @@ func ConfirmRegistration(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "User confirmed successfully", "token": token})
 }
 
+// LoginUser function handles User login
 func LoginUser(c *gin.Context) {
+
 	db := c.MustGet("db").(*gorm.DB)
 
 	var input UserInput
@@ -198,6 +211,7 @@ func LoginUser(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": user, "token": token})
 }
 
+// ResendConfirmationCode function handles resending confirmation code logic
 func ResendConfirmationCode(c *gin.Context) {
 	db := c.MustGet("db").(*gorm.DB)
 
@@ -235,6 +249,8 @@ func ResendConfirmationCode(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Confirmation code sent to email"})
 }
 
+
+// SendEmail function is used for sending emails from the app
 func SendEmail(to string, subject string, body string) error {
 	from := smtpUser
 	msg := "From: " + from + "\n" +
@@ -242,14 +258,54 @@ func SendEmail(to string, subject string, body string) error {
 		"Subject: " + subject + "\n\n" +
 		body
 
-	err := smtp.SendMail(smtpServer+":"+strconv.Itoa(smtpPort),
-		smtp.PlainAuth("", smtpUser, smtpPass, smtpServer),
-		from, []string{to}, []byte(msg))
+	// Set up authentication information.
+	auth := smtp.PlainAuth("", smtpUser, smtpPass, smtpServer)
 
-	if err != nil {
-		fmt.Printf("smtp error: %s", err)
-		return err
+	// Connect to the server, authenticate, set the sender and recipient,
+	// and send the email all in one step.
+	tlsconfig := &tls.Config{
+		InsecureSkipVerify: true,
+		ServerName:         smtpServer,
 	}
+
+	conn, err := tls.Dial("tcp", smtpServer+":"+strconv.Itoa(smtpPort), tlsconfig)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	c, err := smtp.NewClient(conn, smtpServer)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	if err = c.Auth(auth); err != nil {
+		log.Panic(err)
+	}
+
+	if err = c.Mail(from); err != nil {
+		log.Panic(err)
+	}
+
+	if err = c.Rcpt(to); err != nil {
+		log.Panic(err)
+	}
+
+	w, err := c.Data()
+	if err != nil {
+		log.Panic(err)
+	}
+
+	_, err = w.Write([]byte(msg))
+	if err != nil {
+		log.Panic(err)
+	}
+
+	err = w.Close()
+	if err != nil {
+		log.Panic(err)
+	}
+
+	c.Quit()
 
 	fmt.Println("Mail sent successfully!")
 	return nil
